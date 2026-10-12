@@ -23,6 +23,31 @@ python3 update.py
 - 任一年份下載或驗證失敗時，結束碼為 `1`；全部成功或僅有略過時為 `0`。
 - `quality.data.gov.tw` 的憑證缺少 Subject Key Identifier，Python 3.13+ 預設的 X509 嚴格模式會拒絕連線，因此程式僅關閉嚴格模式，仍保留一般憑證鏈驗證。
 
+## holiday.py
+
+查詢放假日的 CLI，讀取 `data/` 內所有年份的資料（可跨年查詢）。
+
+```bash
+python3 holiday.py check [日期]   # 某天是否放假，預設今天；放假輸出 Y、上班輸出 N
+python3 holiday.py check -v [日期] # 顯示完整內容，如「2026-10-10（六） 放假：國慶日」
+python3 holiday.py next  [日期]   # 下一個國定假日
+python3 holiday.py prev  [日期]   # 上一個國定假日
+python3 holiday.py long  [日期]   # 下一個連假（連續放假 3 天以上）
+```
+
+- 日期格式：`YYYY-MM-DD`、`YYYY/MM/DD`、`YYYYMMDD`，省略時為今天。
+- 「國定假日」定義為放假且 `備註` 不為空的日子（含補假）；一般週末不算。
+- `next`／`prev`／`long` 皆不含基準日當天；`long` 以連假的第一天在基準日之後為準。
+- 查無資料時結束碼為 `1`。
+
+```
+$ python3 holiday.py long 2026-10-12
+2026-10-24（六） ~ 2026-10-26（一），共 3 天（12 天後）
+  2026-10-24（六）
+  2026-10-25（日） 臺灣光復暨金門古寧頭大捷紀念日
+  2026-10-26（一） 補假
+```
+
 ## data
 
 `data/{西元年}.json` 為該年每一天的陣列（共 365 或 366 筆），欄位沿用原始資料：
