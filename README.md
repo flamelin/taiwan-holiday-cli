@@ -33,7 +33,13 @@ python3 holiday.py check -v [日期] # 顯示完整內容，如「2026-10-10（�
 python3 holiday.py next  [日期]   # 下一個國定假日
 python3 holiday.py prev  [日期]   # 上一個國定假日
 python3 holiday.py long  [日期]   # 下一個連假（連續放假 3 天以上）
+python3 holiday.py workdays 起 迄  # 兩個日期之間的工作天數（含頭尾兩天）
+python3 holiday.py add-workdays [日期] N  # 日期 + N 個工作天後的日期（N 可為負數）
 ```
+
+- `workdays`、`add-workdays` 預設只輸出結果（天數或 `YYYY-MM-DD`），加 `-v` 顯示完整內容。
+- 工作天 = `是否放假` 為 `"0"` 的日子（含補班日）。
+- `add-workdays` 不含基準日本身，從隔天開始數，例如 `add-workdays 2026-10-12 20` → `2026-11-10`。
 
 - 日期格式：`YYYY-MM-DD`、`YYYY/MM/DD`、`YYYYMMDD`，省略時為今天。
 - 「國定假日」定義為放假且 `備註` 不為空的日子（含補假）；一般週末不算。

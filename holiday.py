@@ -79,12 +79,13 @@ def data_range(days: list[Day]) -> str:
     return f"{days[0].date.isoformat()} ~ {days[-1].date.isoformat()}"
 
 
-def cmd_check(days: list[Day], base: date, verbose: bool) -> int:
+def cmd_check(days: list[Day], args: argparse.Namespace) -> int:
+    base = args.date
     day = next((d for d in days if d.date == base), None)
     if day is None:
         print(f"查無 {base.isoformat()} 的資料（資料範圍：{data_range(days)}）", file=sys.stderr)
         return 1
-    if not verbose:
+    if not args.verbose:
         print("Y" if day.is_off else "N")
         return 0
     status = "放假" if day.is_off else "上班"
@@ -92,7 +93,8 @@ def cmd_check(days: list[Day], base: date, verbose: bool) -> int:
     return 0
 
 
-def cmd_next(days: list[Day], base: date) -> int:
+def cmd_next(days: list[Day], args: argparse.Namespace) -> int:
+    base = args.date
     day = next((d for d in days if d.date > base and d.is_national_holiday), None)
     if day is None:
         print(f"資料中查無 {base.isoformat()} 之後的國定假日（資料範圍：{data_range(days)}）", file=sys.stderr)
@@ -101,7 +103,8 @@ def cmd_next(days: list[Day], base: date) -> int:
     return 0
 
 
-def cmd_prev(days: list[Day], base: date) -> int:
+def cmd_prev(days: list[Day], args: argparse.Namespace) -> int:
+    base = args.date
     day = next((d for d in reversed(days) if d.date < base and d.is_national_holiday), None)
     if day is None:
         print(f"資料中查無 {base.isoformat()} 之前的國定假日（資料範圍：{data_range(days)}）", file=sys.stderr)
@@ -110,7 +113,8 @@ def cmd_prev(days: list[Day], base: date) -> int:
     return 0
 
 
-def cmd_long(days: list[Day], base: date) -> int:
+def cmd_long(days: list[Day], args: argparse.Namespace) -> int:
+    base = args.date
     run = next((r for r in long_weekends(days) if r[0].date > base), None)
     if run is None:
         print(f"資料中查無 {base.isoformat()} 之後的連假（資料範圍：{data_range(days)}）", file=sys.stderr)
@@ -121,32 +125,83 @@ def cmd_long(days: list[Day], base: date) -> int:
     return 0
 
 
-COMMANDS = {
-    "check": ("查詢某天是否放假（預設今天），放假輸出 Y、上班輸出 N", cmd_check),
-    "next": ("下一個國定假日", cmd_next),
-    "prev": ("上一個國定假日", cmd_prev),
-    "long": (f"下一個連假（連續放假 {LONG_WEEKEND_MIN_DAYS} 天以上）", cmd_long),
-}
+def cmd_workdays(days: list[Day], args: argparse.Namespace) -> int:
+    start, end = sorted((args.start, args.end))
+    if start < days[0].date or end > days[-1].date:
+        print(f"日期超出資料範圍（資料範圍：{data_range(days)}）", file=sys.stderr)
+        return 1
+    count = sum(1 for d in days if start <= d.date <= end and not d.is_off)
+    if args.verbose:
+        lookup = {d.date: d for d in days}
+        print(f"{lookup[start].label()} ~ {lookup[end].label()}，共 {count} 個工作天")
+    else:
+        print(count)
+    return 0
+
+
+def cmd_add_workdays(days: list[Day], args: argparse.Namespace) -> int:
+    base, n = args.date, args.n
+    if n == 0:
+        print("工作天數不可為 0", file=sys.stderr)
+        return 1
+    if n > 0:
+        candidates = [d for d in days if d.date > base and not d.is_off]
+    else:
+        candidates = [d for d in reversed(days) if d.date < base and not d.is_off]
+    if not (days[0].date <= base <= days[-1].date) or len(candidates) < abs(n):
+        print(f"超出資料範圍，無法計算（資料範圍：{data_range(days)}）", file=sys.stderr)
+        return 1
+    day = candidates[abs(n) - 1]
+    if args.verbose:
+        direction = "後" if n > 0 else "前"
+        print(f"{base.isoformat()} 起算 {abs(n)} 個工作天{direction}：{day.label()}")
+    else:
+        print(day.date.isoformat())
+    return 0
+
+
+def add_date_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument("date", nargs="?", type=parse_date, default=date.today(), help="基準日期，預設今天")
+
+
+def add_verbose_arg(p: argparse.ArgumentParser, help_text: str) -> None:
+    p.add_argument("-v", "--verbose", action="store_true", help=help_text)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="台灣政府行政機關放假日查詢")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name, (help_text, _) in COMMANDS.items():
+
+    def add_command(name, help_text, handler):
         p = sub.add_parser(name, help=help_text, description=help_text)
-        p.add_argument("date", nargs="?", type=parse_date, default=date.today(), help="基準日期，預設今天")
-        if name == "check":
-            p.add_argument("-v", "--verbose", action="store_true", help="顯示日期、星期與備註")
+        p.set_defaults(handler=handler)
+        return p
+
+    p = add_command("check", "查詢某天是否放假（預設今天），放假輸出 Y、上班輸出 N", cmd_check)
+    add_date_arg(p)
+    add_verbose_arg(p, "顯示日期、星期與備註")
+
+    add_date_arg(add_command("next", "下一個國定假日", cmd_next))
+    add_date_arg(add_command("prev", "上一個國定假日", cmd_prev))
+    add_date_arg(add_command("long", f"下一個連假（連續放假 {LONG_WEEKEND_MIN_DAYS} 天以上）", cmd_long))
+
+    p = add_command("workdays", "計算兩個日期之間的工作天數（含頭尾兩天）", cmd_workdays)
+    p.add_argument("start", type=parse_date, help="起始日期")
+    p.add_argument("end", type=parse_date, help="結束日期")
+    add_verbose_arg(p, "顯示日期區間")
+
+    p = add_command("add-workdays", "基準日期 + N 個工作天後的日期（不含基準日，N 為負數則往前算）", cmd_add_workdays)
+    add_date_arg(p)
+    p.add_argument("n", type=int, help="工作天數")
+    add_verbose_arg(p, "顯示基準日期與星期")
+
     args = parser.parse_args()
 
     days = load_days()
     if not days:
         print("data/ 中沒有資料，請先執行 python3 update.py", file=sys.stderr)
         return 1
-    handler = COMMANDS[args.command][1]
-    if args.command == "check":
-        return handler(days, args.date, args.verbose)
-    return handler(days, args.date)
+    return args.handler(days, args)
 
 
 if __name__ == "__main__":
